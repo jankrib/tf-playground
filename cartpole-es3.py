@@ -41,19 +41,10 @@ class World:
 
 class Net:
     def __init__(self):
-        self.x = tf.placeholder(tf.float32, [None, 24])
-        self.W = tf.Variable(tf.truncated_normal(shape=[24, 12], stddev=0.1))
-        self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 4], stddev=0.1))
-        self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=0.1))
-        self.c2 = tf.matmul(self.x, self.W) + self.b
-        self.action = tf.matmul(self.c2, self.W2)
-        self.generateId()
+        self.x = tf.placeholder(tf.float32, [None, 4])
+        self.W = tf.Variable(tf.truncated_normal(shape=[4, 2], stddev=0.1))
+        self.action = tf.argmax(tf.nn.softmax(tf.matmul(self.x, self.W)), 1)
 
-    def adopt(self, session, net, factor = 1):
-        dev = 0.01 * factor
-        session.run(tf.assign(self.W, net.W + tf.truncated_normal([24, 12], stddev=dev)))
-        session.run(tf.assign(self.W2, net.W2 + tf.truncated_normal([12, 4], stddev=dev)))
-        session.run(tf.assign(self.b, net.b + tf.truncated_normal([12], stddev=dev)))
         self.generateId()
 
     def getAction(self, session, observation):
@@ -70,37 +61,29 @@ class Tribe:
         self.nets = []
         self.world = world
 
-        self.W = tf.Variable(tf.truncated_normal(shape=[24, 12], stddev=0.1))
-        self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 4], stddev=0.1))
-        self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=0.1))
+        self.W = tf.Variable(tf.truncated_normal(shape=[4, 2], stddev=0.1))
+        #self.Wm = tf.Variable(tf.truncated_normal(shape=[4, 2], stddev=0.1))
 
-        self.Wm = tf.Variable(tf.truncated_normal(shape=[24, 12], stddev=0.1))
-
-        self.popRewards = tf.placeholder(tf.float32, shape=[pop])
+        self.popRewards = tf.placeholder(tf.float32, shape=[(pop + 1)])
+        self.rWeights = tf.nn.softmax(self.popRewards)
 
         for i in range(pop):
             net = Net()
             self.nets.append(net)
-            netWeight = tf.gather(tf.nn.softmax(self.popRewards), [i])
+            netWeight = tf.gather(self.rWeights, [i])
             nW = net.W * netWeight if i == 0 else tf.add(nW, net.W * netWeight)
-            nW2 = net.W2 * netWeight if i == 0 else tf.add(nW2, net.W2 * netWeight)
-            nb = net.b * netWeight if i == 0 else tf.add(nb, net.b * netWeight)
 
         self.assignments = [
-            tf.assign(self.Wm, nW-self.W),
-            tf.assign(self.W, nW),
-            tf.assign(self.W2, nW2),
-            tf.assign(self.b, nb)
+            #tf.assign(self.Wm, nW-self.W),
+            tf.assign(self.W, nW + self.W * tf.gather(self.rWeights, [pop]))
         ]
 
         dev = 0.01
 
         for net in self.nets:
-            self.assignments.append(tf.assign(net.W, self.W + self.Wm + tf.truncated_normal([24, 12], stddev=dev)))
-            self.assignments.append(tf.assign(net.W2, self.W2 + tf.truncated_normal([12, 4], stddev=dev)))
-            self.assignments.append(tf.assign(net.b, self.b + tf.truncated_normal([12], stddev=dev)))
+            self.assignments.append(tf.assign(net.W, self.W + tf.truncated_normal([4, 2], stddev=dev)))
 
-    def step(self, session):
+    def step(self, session, lastReward):
         rewards = []
         for net in self.nets:
             reward = self.world.evaluate(net)
@@ -108,11 +91,12 @@ class Tribe:
 
         total = sum(rewards)
 
+        rewards.append(lastReward)
         session.run(self.assignments, feed_dict={self.popRewards: rewards})
 
         return total/self.pop
 
-env = gym.make('BipedalWalker-v2')
+env = gym.make('CartPole-v0')
 sess = tf.Session()
 
 world = World(env, sess)
@@ -120,12 +104,13 @@ world = World(env, sess)
 tribe = Tribe(10, world)
 
 sess.run(tf.global_variables_initializer())
+lastReward = 0
 
 for i in range(1000):
 
-    r = tribe.step(sess)
+    lastReward = tribe.step(sess, lastReward)
 
-    print("{}: {}".format(i, r))
+    print("{}: {}".format(i, lastReward))
 
     #min_index, min_value = min(enumerate(rewards), key=lambda p: p[1])
     #max_index, max_value = max(enumerate(rewards), key=lambda p: p[1])
