@@ -1,3 +1,4 @@
+
 """
 cd /Users/bing/OpenAI/gym    # your gym directory
 pip uninstall box2d-py
@@ -45,7 +46,7 @@ class Net:
         self.W = tf.Variable(tf.truncated_normal(shape=[24, 12], stddev=0.1))
         self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 4], stddev=0.1))
         self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=0.1))
-        self.c2 = tf.matmul(self.x, self.W) + self.b
+        self.c2 = tf.nn.relu(tf.matmul(self.x, self.W) + self.b)
         self.action = tf.matmul(self.c2, self.W2)
         self.generateId()
 
@@ -96,7 +97,7 @@ class Tribe:
         dev = 0.01
 
         for net in self.nets:
-            self.assignments.append(tf.assign(net.W, self.W + self.Wm + tf.truncated_normal([24, 12], stddev=dev)))
+            self.assignments.append(tf.assign(net.W, self.W + tf.truncated_normal([24, 12], stddev=dev)))
             self.assignments.append(tf.assign(net.W2, self.W2 + tf.truncated_normal([12, 4], stddev=dev)))
             self.assignments.append(tf.assign(net.b, self.b + tf.truncated_normal([12], stddev=dev)))
 
