@@ -45,16 +45,9 @@ class Net:
         self.x = tf.placeholder(tf.float32, [None, 24])
         self.W = tf.Variable(tf.truncated_normal(shape=[24, 12], stddev=0.1))
         self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 4], stddev=0.1))
-        self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=0.1))
+        self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=1))
         self.c2 = tf.nn.relu(tf.matmul(self.x, self.W) + self.b)
         self.action = tf.matmul(self.c2, self.W2)
-        self.generateId()
-
-    def adopt(self, session, net, factor = 1):
-        dev = 0.01 * factor
-        session.run(tf.assign(self.W, net.W + tf.truncated_normal([24, 12], stddev=dev)))
-        session.run(tf.assign(self.W2, net.W2 + tf.truncated_normal([12, 4], stddev=dev)))
-        session.run(tf.assign(self.b, net.b + tf.truncated_normal([12], stddev=dev)))
         self.generateId()
 
     def getAction(self, session, observation):
@@ -75,20 +68,18 @@ class Tribe:
         self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 4], stddev=0.1))
         self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=0.1))
 
-        self.Wm = tf.Variable(tf.truncated_normal(shape=[24, 12], stddev=0.1))
-
         self.popRewards = tf.placeholder(tf.float32, shape=[pop])
+        self.popWeights = tf.nn.softmax(self.popRewards)
 
         for i in range(pop):
             net = Net()
             self.nets.append(net)
-            netWeight = tf.gather(tf.nn.softmax(self.popRewards), [i])
+            netWeight = tf.gather(self.popWeights, [i])
             nW = net.W * netWeight if i == 0 else tf.add(nW, net.W * netWeight)
             nW2 = net.W2 * netWeight if i == 0 else tf.add(nW2, net.W2 * netWeight)
             nb = net.b * netWeight if i == 0 else tf.add(nb, net.b * netWeight)
 
         self.assignments = [
-            tf.assign(self.Wm, nW-self.W),
             tf.assign(self.W, nW),
             tf.assign(self.W2, nW2),
             tf.assign(self.b, nb)
@@ -97,9 +88,9 @@ class Tribe:
         dev = 0.01
 
         for net in self.nets:
-            self.assignments.append(tf.assign(net.W, self.W + tf.truncated_normal([24, 12], stddev=dev)))
-            self.assignments.append(tf.assign(net.W2, self.W2 + tf.truncated_normal([12, 4], stddev=dev)))
-            self.assignments.append(tf.assign(net.b, self.b + tf.truncated_normal([12], stddev=dev)))
+            self.assignments.append(tf.assign(net.W, self.W + tf.random_normal([24, 12], stddev=dev)))
+            self.assignments.append(tf.assign(net.W2, self.W2 + tf.random_normal([12, 4], stddev=dev)))
+            self.assignments.append(tf.assign(net.b, self.b + tf.random_normal([12], stddev=dev)))
 
     def step(self, session):
         rewards = []
@@ -114,6 +105,7 @@ class Tribe:
         return total/self.pop
 
 env = gym.make('BipedalWalker-v2')
+#env = wrappers.Monitor(env, './bipedal-experiment-1')
 sess = tf.Session()
 
 world = World(env, sess)
@@ -127,13 +119,6 @@ for i in range(1000):
     r = tribe.step(sess)
 
     print("{}: {}".format(i, r))
-
-    #min_index, min_value = min(enumerate(rewards), key=lambda p: p[1])
-    #max_index, max_value = max(enumerate(rewards), key=lambda p: p[1])
-
-    #f = 1 - ((100+max_value) / 1000)*0.99
-
-    #nets[min_index].adopt(sess, nets[max_index])
 
 
 env.close()
