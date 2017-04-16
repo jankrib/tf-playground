@@ -57,10 +57,19 @@ x = tf.placeholder(tf.float32, [1, 25])
 W = tf.Variable(tf.constant(initW, dtype=tf.float32, shape=[25,5]))
 b = tf.Variable(tf.constant(initb, dtype=tf.float32, shape=[5]))
 
-#W2 = tf.Variable(tf.constant(initW, dtype=tf.float32, shape=[25,5]))
-#b2 = tf.Variable(tf.constant(initb, dtype=tf.float32, shape=[5]))
+initW2 = [[0 for x in range(5)] for y in range(25)]
+initb2 = [0 for x in range(5)]
 
-out = tf.matmul(x, W) + b
+W2 = tf.Variable(tf.constant(initW2, dtype=tf.float32, shape=[25,5]))
+b2 = tf.Variable(tf.constant(initb2, dtype=tf.float32, shape=[5]))
+
+initW3 = [[0 for x in range(5)] for y in range(5)]
+
+W3 = tf.Variable(tf.constant(initW3, dtype=tf.float32, shape=[5,5]))
+
+out1 = tf.matmul(x, W) + b
+out2 = tf.matmul(tf.nn.relu(tf.matmul(x, W2) + b2), W3)
+out = out1 + out2
 
 sess.run(tf.global_variables_initializer())
 observation = env.reset()
