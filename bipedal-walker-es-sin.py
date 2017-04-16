@@ -56,13 +56,13 @@ class Net:
     def getAction(self, session, observation):
         obm = []
         obm.extend(observation)
-        obm.extend([math.sin(x) for x in self.mem])
+        obm.append(math.sin(self.mem))
         a = session.run(self.action, feed_dict={self.x: [obm]})
-        self.mem = a[0][4:]
+        self.mem += a[0][4]
         return a[0][:4]
 
     def reset(self):
-        self.mem = [0]
+        self.mem = 0
 
     def generateId(self):
         self.id = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(4))
@@ -73,6 +73,8 @@ class Tribe:
         self.pop = pop
         self.nets = []
         self.world = world
+
+        
 
         self.W = tf.Variable(tf.truncated_normal(shape=[25, 12], stddev=0.1))
         self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 5], stddev=0.1))
@@ -115,7 +117,7 @@ class Tribe:
         return total/self.pop
 
 env = gym.make('BipedalWalker-v2')
-env = wrappers.Monitor(env, './exp/bipedal-experiment-8')
+env = wrappers.Monitor(env, './exp/bipedal-experiment-9')
 sess = tf.Session()
 
 world = World(env, sess)
@@ -124,7 +126,7 @@ tribe = Tribe(10, world)
 
 sess.run(tf.global_variables_initializer())
 
-for i in range(1000):
+for i in range(10000):
 
     r = tribe.step(sess)
 
