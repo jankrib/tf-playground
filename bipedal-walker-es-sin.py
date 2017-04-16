@@ -30,7 +30,7 @@ class World:
         totalReward = 0
         net.reset()
 
-        for _ in range(1000):
+        while True:
             action = net.getAction(self.session, observation)
             newObservation, reward, done, info = self.env.step(action)
 
@@ -56,7 +56,7 @@ class Net:
     def getAction(self, session, observation):
         obm = []
         obm.extend(observation)
-        obm.extend([sin(x) for x in self.mem])
+        obm.extend([math.sin(x) for x in self.mem])
         a = session.run(self.action, feed_dict={self.x: [obm]})
         self.mem = a[0][4:]
         return a[0][:4]
@@ -115,7 +115,7 @@ class Tribe:
         return total/self.pop
 
 env = gym.make('BipedalWalker-v2')
-#env = wrappers.Monitor(env, './bipedal-experiment-1')
+env = wrappers.Monitor(env, './exp/bipedal-experiment-8')
 sess = tf.Session()
 
 world = World(env, sess)
