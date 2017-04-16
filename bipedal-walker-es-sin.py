@@ -45,12 +45,30 @@ class World:
 
 class Net:
     def __init__(self):
-        self.x = tf.placeholder(tf.float32, [None, 25])
-        self.W = tf.Variable(tf.truncated_normal(shape=[25, 12], stddev=0.1))
-        self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 5], stddev=0.1))
-        self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=1))
-        self.c2 = tf.nn.relu(tf.matmul(self.x, self.W) + self.b)
-        self.action = tf.matmul(self.c2, self.W2)
+        self.x = tf.placeholder(tf.float32, [1, 25])
+
+        initW = [[0 for x in range(5)] for y in range(25)]
+        initW[0][0] = 1
+        initW[0][1] = 1
+        initW[0][2] = 1
+        initW[0][3] = 1
+
+        initW[2][4] = 0.35
+
+        initW[24][0] = -1
+        initW[24][1] = 1
+        initW[24][2] = 1
+        initW[24][3] = -1
+
+        initb = [0 for x in range(5)]
+        initb[0] = -0.1
+        initb[2] = -0.1
+
+
+        self.W = tf.Variable(tf.constant(initW, dtype=tf.float32, shape=[25,5]))
+        self.b = tf.Variable(tf.constant(initb, dtype=tf.float32, shape=[5]))
+
+        self.action = tf.matmul(self.x, self.W) + self.b
         self.generateId()
 
     def getAction(self, session, observation):
@@ -74,26 +92,42 @@ class Tribe:
         self.nets = []
         self.world = world
 
-        
+        initW = [[0 for x in range(5)] for y in range(25)]
+        initW[0][0] = 1
+        initW[0][1] = 1
+        initW[0][2] = 1
+        initW[0][3] = 1
 
-        self.W = tf.Variable(tf.truncated_normal(shape=[25, 12], stddev=0.1))
-        self.W2 = tf.Variable(tf.truncated_normal(shape=[12, 5], stddev=0.1))
-        self.b = tf.Variable(tf.truncated_normal(shape=[12], stddev=0.1))
+        initW[2][4] = 0.35
+
+        initW[24][0] = -1
+        initW[24][1] = 1
+        initW[24][2] = 1
+        initW[24][3] = -1
+
+        initb = [0 for x in range(5)]
+        initb[0] = -0.1
+        initb[2] = -0.1
+
+
+        self.W = tf.Variable(tf.constant(initW, dtype=tf.float32, shape=[25,5]))
+        self.b = tf.Variable(tf.constant(initb, dtype=tf.float32, shape=[5]))
 
         self.popRewards = tf.placeholder(tf.float32, shape=[pop])
         self.popWeights = tf.nn.softmax(self.popRewards)
+
+        nW = self.W * 0.8
+        nb = self.b * 0.8
 
         for i in range(pop):
             net = Net()
             self.nets.append(net)
             netWeight = tf.gather(self.popWeights, [i])
-            nW = net.W * netWeight if i == 0 else tf.add(nW, net.W * netWeight)
-            nW2 = net.W2 * netWeight if i == 0 else tf.add(nW2, net.W2 * netWeight)
-            nb = net.b * netWeight if i == 0 else tf.add(nb, net.b * netWeight)
+            nW = tf.add(nW, net.W * netWeight * 0.2)
+            nb = tf.add(nb, net.b * netWeight * 0.2)
 
         self.assignments = [
             tf.assign(self.W, nW),
-            tf.assign(self.W2, nW2),
             tf.assign(self.b, nb)
         ]
 
@@ -101,7 +135,6 @@ class Tribe:
 
         for net in self.nets:
             self.assignments.append(tf.assign(net.W, self.W + tf.random_normal([25, 12], stddev=dev)))
-            self.assignments.append(tf.assign(net.W2, self.W2 + tf.random_normal([12, 5], stddev=dev)))
             self.assignments.append(tf.assign(net.b, self.b + tf.random_normal([12], stddev=dev)))
 
     def step(self, session):
