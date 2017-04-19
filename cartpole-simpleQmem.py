@@ -6,6 +6,21 @@ from gym import wrappers
 import math
 import random
 
+def updateQ(q, a, r):
+    shape = tf.shape(q)
+    width = q.get_shape()[1]
+    row_indices = tf.range(shape[0])
+    col_indices = a
+
+    linear_indices = row_indices*width + col_indices
+    q_flat = tf.reshape(q, [-1])
+
+    unchanged_indices = tf.range(tf.size(q_flat))
+    changed_indices = linear_indices
+    q_flat = tf.dynamic_stitch([unchanged_indices, changed_indices],
+                               [q_flat, r])
+    return tf.reshape(q_flat, shape)
+
 class ExperienceMemory:
     def __init__(self, capacity, batchSize):
         self.capacity = capacity
@@ -16,7 +31,7 @@ class ExperienceMemory:
         return len(self.cache) >= self.batchSize
 
     def add(self, state, action, reward, newState):
-        self.cache.append([state, action, reward, newState])
+        self.cache.append([state, int(action), reward, newState])
 
         if len(self.cache) > self.capacity:
             self.cache.pop(0)
@@ -24,8 +39,26 @@ class ExperienceMemory:
     def getBatch(self):
         return random.sample(self.cache, self.batchSize)
 
+    def getAll(self):
+        l = self.cache
+        l = list(map(list, zip(*l)))
+        return l[0], l[1], l[2], l[3]
 
-x = tf.placeholder(tf.float32, [1, 4])
+    def getReversed(self):
+        l = reversed(self.cache)
+        l = list(map(list, zip(*l)))
+        return l[0], l[1], l[2], l[3]
+
+
+
+#Params
+y = .99
+e = 0.5
+num_episodes = 1000
+
+#Model
+
+x = tf.placeholder(tf.float32, [None, 4])
 
 #Layer 1
 W1 = tf.Variable(tf.truncated_normal(shape=[4, 2], stddev=0.001))
@@ -35,10 +68,17 @@ b1 = tf.Variable(tf.truncated_normal(shape=[2], stddev=0.001))
 Qout = tf.matmul(x, W1) + b1
 predict = tf.argmax(Qout, 1)
 
-maxQout = tf.reduce_max(Qout)
+#NextState
+xn = tf.placeholder(tf.float32, [None, 4])
+actions = tf.placeholder(tf.int32, shape=[None])
+rewards = tf.placeholder(tf.float32, shape=[None])
+
+maxQout = tf.reduce_max(tf.matmul(xn, W1) + b1)
+
+nextQ = updateQ(Qout, actions, rewards + y*maxQout)
 
 #loss
-nextQ = tf.placeholder(shape=[1,2], dtype=tf.float32)
+#nextQ = tf.placeholder(shape=[None,2], dtype=tf.float32)
 loss = tf.reduce_sum(tf.square(nextQ - Qout))
 trainer = tf.train.GradientDescentOptimizer(learning_rate=0.1)
 updateModel = trainer.minimize(loss)
@@ -46,11 +86,6 @@ updateModel = trainer.minimize(loss)
 #Trust  [0,0,1,0,0]  Describes how much the Q value can be trusted
 #trust = tf.placeholder(shape=[1,2],dtype=tf.float32)
 
-
-#Params
-y = .99
-e = 0.1
-num_episodes = 1000
 
 
 
@@ -63,6 +98,8 @@ env = gym.make('CartPole-v0')
 for i in range(num_episodes):
     observation = env.reset()
     totalReward = 0
+    emem = ExperienceMemory(1000, 50)
+
     while True:
         #env.render()
         a = sess.run(predict, feed_dict={x: [observation]})
@@ -73,15 +110,10 @@ for i in range(num_episodes):
 
         newObservation, reward, done, _ = env.step(action)
 
-        mem.add(observation, action, reward, newObservation)
+        if done:
+            reward = 0
 
-        allQ = sess.run(Qout, feed_dict={x: [observation]})
-        maxQ1 = 0 if done else sess.run(maxQout, feed_dict={x: [newObservation]})
-
-        targetQ = allQ
-        targetQ[0, action] = reward + y*maxQ1
-
-        sess.run(updateModel, feed_dict={x: [observation], nextQ: targetQ})
+        emem.add(observation, action, reward, newObservation)
 
         observation = newObservation
         totalReward += reward
@@ -93,5 +125,9 @@ for i in range(num_episodes):
             print("{}: {}".format(i, totalReward))
             break
 
+    #Training
+    o, a, r, no = emem.getReversed()
+
+    sess.run(updateModel, feed_dict={x: o, xn: no, actions: a, rewards: r})
 
 env.close()

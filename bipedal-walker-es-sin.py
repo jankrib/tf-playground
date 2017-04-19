@@ -34,7 +34,7 @@ class World:
             action = net.getAction(self.session, observation)
             newObservation, reward, done, info = self.env.step(action)
 
-            totalReward += reward
+            totalReward += max(reward, -1)
 
             if done:
                 break
@@ -91,6 +91,7 @@ class Tribe:
         self.pop = pop
         self.nets = []
         self.world = world
+        self.lastReward = 0
 
         initW = [[0 for x in range(5)] for y in range(25)]
         initW[0][0] = 1
@@ -113,29 +114,30 @@ class Tribe:
         self.W = tf.Variable(tf.constant(initW, dtype=tf.float32, shape=[25,5]))
         self.b = tf.Variable(tf.constant(initb, dtype=tf.float32, shape=[5]))
 
-        self.popRewards = tf.placeholder(tf.float32, shape=[pop])
+        self.popRewards = tf.placeholder(tf.float32, shape=[pop + 1])
         self.popWeights = tf.nn.softmax(self.popRewards)
 
-        nW = self.W * 0.8
-        nb = self.b * 0.8
+        netWeight = tf.gather(self.popWeights, [self.pop])
+        nW = self.W * netWeight
+        nb = self.b * netWeight
 
         for i in range(pop):
             net = Net()
             self.nets.append(net)
             netWeight = tf.gather(self.popWeights, [i])
-            nW = tf.add(nW, net.W * netWeight * 0.2)
-            nb = tf.add(nb, net.b * netWeight * 0.2)
+            nW = tf.add(nW, net.W * netWeight)
+            nb = tf.add(nb, net.b * netWeight)
 
         self.assignments = [
             tf.assign(self.W, nW),
             tf.assign(self.b, nb)
         ]
 
-        dev = 0.01
+        dev = 0.001
 
         for net in self.nets:
-            self.assignments.append(tf.assign(net.W, self.W + tf.random_normal([25, 12], stddev=dev)))
-            self.assignments.append(tf.assign(net.b, self.b + tf.random_normal([12], stddev=dev)))
+            self.assignments.append(tf.assign(net.W, self.W + tf.random_normal([25, 5], stddev=dev)))
+            self.assignments.append(tf.assign(net.b, self.b + tf.random_normal([5], stddev=dev)))
 
     def step(self, session):
         rewards = []
@@ -143,19 +145,22 @@ class Tribe:
             reward = self.world.evaluate(net)
             rewards.append(reward)
 
+        rewards.append(self.lastReward)
+
         total = sum(rewards)
+        self.lastReward = total/self.pop
 
         session.run(self.assignments, feed_dict={self.popRewards: rewards})
 
-        return total/self.pop
+        return self.lastReward
 
 env = gym.make('BipedalWalker-v2')
-env = wrappers.Monitor(env, './exp/bipedal-experiment-9')
+env = wrappers.Monitor(env, './exp/bipedal-experiment-18')
 sess = tf.Session()
 
 world = World(env, sess)
 
-tribe = Tribe(10, world)
+tribe = Tribe(30, world)
 
 sess.run(tf.global_variables_initializer())
 
